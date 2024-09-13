@@ -104,6 +104,7 @@ public final class Session
     private final OptimizerResultCollector optimizerResultCollector = new OptimizerResultCollector();
     private final CTEInformationCollector cteInformationCollector = new CTEInformationCollector();
     private final Map<PlanNodeId, PlanNodeStatsEstimate> planNodeStatsMap = new HashMap<>();
+    private final Map<Integer, PlanNodeStatsEstimate> mlStatsMap = new HashMap<>();
     private final Map<PlanNodeId, PlanCostEstimate> planNodeCostMap = new HashMap<>();
 
     public Session(
@@ -346,6 +347,11 @@ public final class Session
     public Map<PlanNodeId, PlanNodeStatsEstimate> getPlanNodeStatsMap()
     {
         return planNodeStatsMap;
+    }
+
+    public Map<Integer, PlanNodeStatsEstimate> getMlStatsMap()
+    {
+        return mlStatsMap;
     }
 
     public Map<PlanNodeId, PlanCostEstimate> getPlanNodeCostMap()

@@ -12,6 +12,7 @@
 # limitations under the License.
 
 set -eufx -o pipefail
+set -x
 
 # Run the velox setup script first.
 source "$(dirname "${BASH_SOURCE}")/../velox/scripts/setup-macos.sh"
