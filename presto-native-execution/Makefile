@@ -18,7 +18,7 @@ TREAT_WARNINGS_AS_ERRORS ?= 1
 ENABLE_WALL ?= 1
 NUM_THREADS ?= $(shell getconf _NPROCESSORS_CONF 2>/dev/null || echo 1)
 CPU_TARGET ?= "avx"
-CMAKE_PREFIX_PATH ?= "/usr/local"
+CMAKE_PREFIX_PATH ?= "/usr/local;/Users/xiuwenzheng/Documents/presto/presto-native-execution/dependencies/install"
 PRESTOCPP_ROOT_DIR="$(shell pwd)"
 
 EXTRA_CMAKE_FLAGS ?= ""
