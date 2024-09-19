@@ -59,7 +59,8 @@ public class FilterStatsRule
         // needs to transfer the filter conditions to strings and get the table name
         PlanNodeStatsEstimate estimate = PlanNodeStatsEstimate.unknown();
         if (useMLBasedStatisticsEnabled(session)) {
-            if ((node.getSource() instanceof TableScanNode) || (node.getSource() instanceof GroupReference && resolveGroupReferences(node.getSource(), lookup) instanceof TableScanNode)) {
+            if ((node.getSource() instanceof TableScanNode) || (node.getSource() instanceof GroupReference
+                    && resolveGroupReferences(node.getSource(), lookup) instanceof TableScanNode)) {
 //                String table = (((TableScanNode) node.getSource()).getTable().getConnectorHandle()).getTableName().toString();
                 ConditionExtractor conditionExtractor = new ConditionExtractor(node, lookup);
                 List<Condition> conditions = conditionExtractor.extractConditions();

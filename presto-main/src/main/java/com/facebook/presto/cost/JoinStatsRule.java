@@ -147,7 +147,6 @@ public class JoinStatsRule
         String joinPredicatesStr = joinPredicates.stream().sorted().collect(Collectors.joining(" AND "));
         Integer hashValue = Objects.hash(filterPredicatesStr, joinPredicatesStr);
         if (mlStatsMap.containsKey(hashValue)) {
-//            System.out.println("In map: " + filterPredicatesStr + "||" + joinPredicatesStr);
             return mlStatsMap.get(hashValue);
         }
         try {

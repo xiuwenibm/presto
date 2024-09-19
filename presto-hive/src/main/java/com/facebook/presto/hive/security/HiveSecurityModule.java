@@ -31,7 +31,7 @@ public class HiveSecurityModule
         bindSecurityModule("legacy", new LegacySecurityModule());
         bindSecurityModule("file", new FileBasedAccessControlModule());
         bindSecurityModule("read-only", new ReadOnlySecurityModule());
-        bindSecurityModule("sql-standard", new SqlStandardSecurityModule());
+        bindSecurityModule("AllowAllAccessControl", new SqlStandardSecurityModule());
         bindSecurityModule("ranger", new RangerBasedAccessControlModule());
     }
 
