@@ -49,8 +49,6 @@ public class SubstraitExchangePOJORel
     {
         return ImmutableExtensionSingle.builder()
                 .input(input)
-                .detail(detail)
-                .deriveRecordType(detail.deriveRecordType(input))
                 .build().withHint(hint);
     }
 
@@ -59,8 +57,6 @@ public class SubstraitExchangePOJORel
     {
         return "SubstraitExchangePOJORel{" +
                 "input=" + input +
-                ", detail=" + detail +
-                ", exchangeType=" + exchangeType +
                 '}';
     }
 }

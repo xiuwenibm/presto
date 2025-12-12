@@ -76,6 +76,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.facebook.presto.expressions.LogicalRowExpressions.TRUE_CONSTANT;
@@ -111,7 +113,7 @@ public class SubstraitPlan
         io.substrait.proto.Plan patchedPlan = annotatePlanWithStats(protoPlan, planNodeStatsMap);
         try {
             StringBuilder sb = new StringBuilder();
-            byte[] bytes = protoPlan.toByteArray();
+            byte[] bytes = patchedPlan.toByteArray();
             Files.write(Paths.get("/tmp/substrait_plan.bin"), bytes);
             // TextFormat.printer().print(protoPlan, sb);
             // A JsonFormat printer would also work
@@ -127,8 +129,7 @@ public class SubstraitPlan
             throws IOException
     {
         JsonFormat.TypeRegistry typeRegistry = JsonFormat.TypeRegistry.newBuilder()
-                .add(StringValue.getDescriptor())
-                .add(Empty.getDescriptor()).add(PrestoStats.PrestoRelStats.getDescriptor())
+                .add(PrestoStats.PrestoRelStats.getDescriptor())
                 .build();
 
         JsonFormat.printer()
@@ -151,6 +152,7 @@ public class SubstraitPlan
         private final Session session;
         private final SubstraitRowExpressionVisitor substraitRowExpressionVisitor;
         private final LogicalRowExpressions logicalRowExpressions;
+        private final Pattern HIVE_TABLE_PATTERN = Pattern.compile("schemaName=([^,}]+), tableName=([^,}]+)");
 
         public Visitor(Metadata metadata, Session session)
         {
@@ -255,15 +257,7 @@ public class SubstraitPlan
         @Override
         public Rel visitPlan(PlanNode node, Void context)
         {
-            return ExtensionSingle.from(new EmptyDetail()
-                                        {
-                                            @Override
-                                            public String toString()
-                                            {
-                                                return String.format("Unmapped plan node: %s", node.getClass().getSimpleName());
-                                            }
-                                        },
-                    node.getSources().get(0).accept(this, context)).build();
+            return node.getSources().get(0).accept(this, context);
         }
 
         /**
@@ -326,10 +320,17 @@ public class SubstraitPlan
             List<io.substrait.type.Type> columnTypes = node.getOutputVariables().stream()
                     .map(x -> toSubstraitType(metadata.getColumnMetadata(session, tableHandle, assignments.get(x)).getType()))
                     .collect(ImmutableList.toImmutableList());
-
-            return withHint(b.namedScan(
-                    Collections.singletonList(tableHandle.toString()),
-                    readColumns, columnTypes), node);
+            String handleString = tableHandle.toString();
+            List<String> tableNames = Collections.singletonList(handleString);
+            if (tableHandle.getConnectorId().getCatalogName().equals("hive")) {
+                Matcher matcher = HIVE_TABLE_PATTERN.matcher(handleString);
+                if (matcher.find()) {
+//                    String schemaName = matcher.group(1).trim();
+                    String tableName = matcher.group(2).trim();
+                    tableNames = ImmutableList.of(tableName);
+                }
+            }
+            return withHint(b.namedScan(tableNames, readColumns, columnTypes), node);
         }
 
         @Override
@@ -368,13 +369,31 @@ public class SubstraitPlan
                 equiJoinFilter = and(equiJoinFilter, node.getFilter().get());
             }
 
-            ImmutableMap.Builder<VariableReferenceExpression, FieldReference> variablesToFieldRefs = ImmutableMap.builder();
-            variablesToFieldRefs.putAll(getNodeOutputToFieldRefMap(node.getLeft(), leftRel));
-            variablesToFieldRefs.putAll(getNodeOutputToFieldRefMap(node.getRight(), rightRel));
+            final RowExpression joinFilter = equiJoinFilter;
+            final List<Rel> inputs = ImmutableList.of(leftRel, rightRel);
 
-            Expression joinExpression = toSubstraitExpression(equiJoinFilter, variablesToFieldRefs.build());
+            return withHint(b.join(joinInput -> {
+                        ImmutableMap.Builder<VariableReferenceExpression, FieldReference> varsToFieldRefs =
+                                ImmutableMap.builder();
 
-            return withHint(b.join(joinInput -> joinExpression,
+                        int fieldIndex = 0;
+
+                        // index from 0
+                        for (VariableReferenceExpression var : node.getLeft().getOutputVariables()) {
+                            varsToFieldRefs.put(var, FieldReference.newInputRelReference(fieldIndex, inputs));
+                            fieldIndex++;
+                        }
+
+                        // index after left end index
+                        for (VariableReferenceExpression var : node.getRight().getOutputVariables()) {
+                            varsToFieldRefs.put(var, FieldReference.newInputRelReference(fieldIndex, inputs));
+                            fieldIndex++;
+                        }
+
+                        return  toSubstraitExpression(
+                                joinFilter,
+                                varsToFieldRefs.build());
+                    },
                     joinType,
                     leftRel, rightRel), node);
         }
@@ -382,8 +401,7 @@ public class SubstraitPlan
         @Override
         public Rel visitExchange(ExchangeNode node, Void context)
         {
-            return new SubstraitExchangePOJORel(
-                    node.getSources().get(0).accept(this, context), node.getType()).getAsRelWithHint(buildHint(node));
+            return node.getSources().get(0).accept(this, context);
         }
     }
 }
