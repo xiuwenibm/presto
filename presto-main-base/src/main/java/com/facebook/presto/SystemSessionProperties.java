@@ -375,6 +375,11 @@ public final class SystemSessionProperties
     public static final String NATIVE_ENFORCE_JOIN_BUILD_INPUT_PARTITION = "native_enforce_join_build_input_partition";
     public static final String NATIVE_EXECUTION_SCALE_WRITER_THREADS_ENABLED = "native_execution_scale_writer_threads_enabled";
 
+    public static final String USE_GPU = "use_gpu";
+    public static final String GPU_TAG = "gpu_tag";
+
+
+
     private final List<PropertyMetadata<?>> sessionProperties;
 
     public SystemSessionProperties()
@@ -2095,7 +2100,16 @@ public final class SystemSessionProperties
                 booleanProperty(ADD_DISTINCT_BELOW_SEMI_JOIN_BUILD,
                         "Add distinct aggregation below semi join build",
                         featuresConfig.isAddDistinctBelowSemiJoinBuild(),
-                        false));
+                        false),
+                booleanProperty(USE_GPU,
+                        "Utilize GPU for the query",
+                        featuresConfig.isUseGPU(),
+                        false),
+                stringProperty(GPU_TAG,
+                        "GPUs that the query use",
+                        featuresConfig.getGpuTags(),
+                        false)
+        );
     }
 
     public static int getMaxPrefixesCount(Session session)
@@ -3563,5 +3577,13 @@ public final class SystemSessionProperties
     public static boolean isSkipPushdownThroughExchangeForRemoteProjection(Session session)
     {
         return session.getSystemProperty(SKIP_PUSHDOWN_THROUGH_EXCHANGE_FOR_REMOTE_PROJECTION, Boolean.class);
+    }
+
+    public static boolean isUseGPU(Session session) {
+        return session.getSystemProperty(USE_GPU, Boolean.class);
+    }
+
+    public static String getGpuTags(Session session) {
+        return session.getSystemProperty(GPU_TAG,  String.class);
     }
 }

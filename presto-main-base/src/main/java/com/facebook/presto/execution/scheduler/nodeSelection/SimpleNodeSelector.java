@@ -36,6 +36,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +61,7 @@ import static com.facebook.presto.spi.StandardErrorCode.NO_NODES_AVAILABLE;
 import static com.facebook.presto.spi.schedule.NodeSelectionStrategy.HARD_AFFINITY;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static com.google.common.collect.Sets.newHashSet;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -83,6 +85,8 @@ public class SimpleNodeSelector
     private final int maxUnacknowledgedSplitsPerTask;
     private final int maxTasksPerStage;
     private final int maxPreferredNodes;
+    private final boolean useGPU;
+    private final String gpuTags;
 
     public SimpleNodeSelector(
             InternalNodeManager nodeManager,
@@ -97,7 +101,8 @@ public class SimpleNodeSelector
             long maxPendingSplitsWeightPerTask,
             int maxUnacknowledgedSplitsPerTask,
             int maxTasksPerStage,
-            int maxPreferredNodes)
+            int maxPreferredNodes,
+            Optional<String> gpuTags)
     {
         this.nodeManager = requireNonNull(nodeManager, "nodeManager is null");
         this.nodeSelectionStats = requireNonNull(nodeSelectionStats, "nodeSelectionStats is null");
@@ -113,6 +118,14 @@ public class SimpleNodeSelector
         checkArgument(maxUnacknowledgedSplitsPerTask > 0, "maxUnacknowledgedSplitsPerTask must be > 0, found: %s", maxUnacknowledgedSplitsPerTask);
         this.maxTasksPerStage = maxTasksPerStage;
         this.maxPreferredNodes = maxPreferredNodes;
+        if (gpuTags.isPresent()) {
+            this.useGPU = true;
+            this.gpuTags = gpuTags.orElse(null);
+        }
+        else {
+            this.useGPU = false;
+            this.gpuTags = null;
+        }
     }
 
     @Override
@@ -154,6 +167,9 @@ public class SimpleNodeSelector
         NodeAssignmentStats assignmentStats = new NodeAssignmentStats(nodeTaskMap, nodeMap, existingTasks);
 
         List<InternalNode> eligibleNodes = getEligibleNodes(maxTasksPerStage, nodeMap, existingTasks);
+        if (useGPU) {
+            eligibleNodes = filterEligibleNodesByUseGpu(eligibleNodes, gpuTags);
+        }
         NodeSelection randomNodeSelection = new RandomNodeSelection(eligibleNodes, minCandidates);
         Set<InternalNode> blockedExactNodes = new HashSet<>();
         boolean splitWaitingForAnyNode = false;
@@ -236,6 +252,38 @@ public class SimpleNodeSelector
             blocked = toWhenHasSplitQueueSpaceFuture(blockedExactNodes, existingTasks, calculateLowWatermark(maxPendingSplitsWeightPerTask));
         }
         return new SplitPlacementResult(blocked, assignment);
+    }
+
+    private List<InternalNode> filterEligibleNodesByUseGpu(List<InternalNode> eligibleNodes, String gpuTags) {
+        if (gpuTags.isEmpty()) {
+            return eligibleNodes;
+        }
+        Set<String> requiredNodeTags = Arrays.stream(gpuTags.split(","))
+                .map(SimpleNodeSelector::mapQueryTagToNodeTag)
+                .collect(toImmutableSet());
+
+        return eligibleNodes.stream()
+                .filter(node -> {
+                    Set<String> nodeTags = node.getGpuTags();
+                    return nodeTags.containsAll(requiredNodeTags);
+                })
+                .collect(toList());
+    }
+
+    static String mapQueryTagToNodeTag(String queryTag) {
+        if (queryTag.startsWith("gpu-")) {
+            return "gpu-group-" + queryTag.substring("gpu-".length());
+        }
+        if (queryTag.startsWith("nv-lin-")) {
+            return "nv-lin-group-" + queryTag.substring("nv-lin-".length());
+        }
+        if (queryTag.startsWith("nv-")) {
+            return "nv-lin-group-" + queryTag.substring("nv-".length());
+        }
+        if (queryTag.startsWith("ucx-")) {
+            return "UCX-group-" + queryTag.substring("ucx-".length());
+        }
+        throw new IllegalArgumentException("Unknown query tag: " + queryTag);
     }
 
     @Override

@@ -331,6 +331,8 @@ public class FeaturesConfig
     private ShuffleForTableScanStrategy tableScanShuffleStrategy = ShuffleForTableScanStrategy.DISABLED;
     private boolean skipPushdownThroughExchangeForRemoteProjection;
 
+    private boolean useGPU = false;
+    private String gpuTags = "";
     private boolean builtInSidecarFunctionsEnabled;
 
     public enum PartitioningPrecisionStrategy
@@ -574,6 +576,16 @@ public class FeaturesConfig
     {
         return cteFilterAndProjectionPushdownEnabled;
     }
+
+    public boolean isUseGPU() {
+        return useGPU;
+    }
+
+    public String getGpuTags()
+    {
+        return gpuTags;
+    }
+
 
     @Config("cte-filter-and-projection-pushdown-enabled")
     @ConfigDescription("Enable pushing down filters and projections inside common table expressions")

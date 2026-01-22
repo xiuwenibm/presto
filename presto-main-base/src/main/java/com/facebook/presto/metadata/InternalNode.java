@@ -25,6 +25,7 @@ import com.facebook.presto.spi.NodePoolType;
 
 import java.net.URI;
 import java.util.OptionalInt;
+import java.util.Set;
 
 import static com.facebook.presto.metadata.InternalNode.NodeStatus.ALIVE;
 import static com.facebook.presto.spi.NodePoolType.DEFAULT;
@@ -72,6 +73,7 @@ public class InternalNode
     private final NodeStatus nodeStatus;
     private final OptionalInt raftPort;
     private final NodePoolType poolType;
+    private Set<String> gpuTags;
 
     public InternalNode(String nodeIdentifier, URI internalUri, NodeVersion nodeVersion, boolean coordinator)
     {
@@ -116,6 +118,25 @@ public class InternalNode
         this.poolType = requireNonNull(poolType, "poolType is null");
     }
 
+    public InternalNode(
+            String nodeIdentifier,
+            URI internalUri,
+            OptionalInt thriftPort,
+            NodeVersion nodeVersion,
+            boolean coordinator,
+            boolean resourceManager,
+            boolean catalogServer,
+            boolean coordinatorSidecar,
+            NodeStatus nodeStatus,
+            OptionalInt raftPort,
+            NodePoolType poolType,
+            Set<String> gpuTags)
+    {
+        this(nodeIdentifier, internalUri, thriftPort, nodeVersion, coordinator, resourceManager,
+                catalogServer, coordinatorSidecar, nodeStatus, raftPort, poolType);
+        this.gpuTags = gpuTags;
+    }
+
     @ThriftField(1)
     @Override
     public String getNodeIdentifier()
@@ -127,6 +148,11 @@ public class InternalNode
     public String getHost()
     {
         return internalUri.getHost();
+    }
+
+    public Set<String> getGpuTags()
+    {
+        return gpuTags;
     }
 
     @Override

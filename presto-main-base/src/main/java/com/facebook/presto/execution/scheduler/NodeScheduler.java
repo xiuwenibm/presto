@@ -59,9 +59,11 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 import static com.facebook.airlift.concurrent.MoreFutures.whenAnyCompleteCancelOthers;
+import static com.facebook.presto.SystemSessionProperties.getGpuTags;
 import static com.facebook.presto.SystemSessionProperties.getMaxUnacknowledgedSplitsPerTask;
 import static com.facebook.presto.SystemSessionProperties.getResourceAwareSchedulingStrategy;
 import static com.facebook.presto.SystemSessionProperties.isScheduleSplitsBasedOnTaskLoad;
+import static com.facebook.presto.SystemSessionProperties.isUseGPU;
 import static com.facebook.presto.execution.scheduler.NodeSchedulerConfig.NetworkTopologyType;
 import static com.facebook.presto.execution.scheduler.NodeSchedulerConfig.ResourceAwareSchedulingStrategy;
 import static com.facebook.presto.execution.scheduler.NodeSchedulerConfig.ResourceAwareSchedulingStrategy.TTL;
@@ -212,6 +214,7 @@ public class NodeScheduler
 
         int maxUnacknowledgedSplitsPerTask = getMaxUnacknowledgedSplitsPerTask(requireNonNull(session, "session is null"));
         ResourceAwareSchedulingStrategy resourceAwareSchedulingStrategy = getResourceAwareSchedulingStrategy(session);
+
         if (useNetworkTopology) {
             return new TopologyAwareNodeSelector(
                     nodeManager,
@@ -242,7 +245,9 @@ public class NodeScheduler
                 maxPendingSplitsWeightPerTask,
                 maxUnacknowledgedSplitsPerTask,
                 maxTasksPerStage,
-                maxPreferredNodes);
+                maxPreferredNodes,
+                Optional.ofNullable(getGpuTags(session))
+        );
 
         if (resourceAwareSchedulingStrategy == TTL) {
             return new SimpleTtlNodeSelector(
