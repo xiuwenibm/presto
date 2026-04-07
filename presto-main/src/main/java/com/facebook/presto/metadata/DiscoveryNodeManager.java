@@ -17,6 +17,7 @@ import com.facebook.airlift.discovery.client.ServiceDescriptor;
 import com.facebook.airlift.discovery.client.ServiceSelector;
 import com.facebook.airlift.discovery.client.ServiceType;
 import com.facebook.airlift.http.client.HttpClient;
+import com.facebook.airlift.http.client.Request;
 import com.facebook.airlift.log.Logger;
 import com.facebook.airlift.node.NodeInfo;
 import com.facebook.drift.client.DriftClient;
@@ -31,6 +32,7 @@ import com.facebook.presto.spi.NodeLoadMetrics;
 import com.facebook.presto.spi.NodePoolType;
 import com.facebook.presto.spi.NodeState;
 import com.facebook.presto.spi.NodeStats;
+import com.facebook.presto.server.NodeStatus;
 import com.facebook.presto.statusservice.NodeStatusService;
 import com.google.common.base.Splitter;
 import com.google.common.collect.HashMultimap;
@@ -67,6 +69,9 @@ import java.util.function.Predicate;
 
 import static com.facebook.airlift.concurrent.Threads.threadsNamed;
 import static com.facebook.airlift.http.client.HttpUriBuilder.uriBuilderFrom;
+import static com.facebook.airlift.http.client.JsonResponseHandler.createJsonResponseHandler;
+import static com.facebook.airlift.http.client.Request.Builder.prepareGet;
+import static com.facebook.airlift.json.JsonCodec.jsonCodec;
 import static com.facebook.presto.failureDetector.HeartbeatFailureDetector.convertDiscoveryDescriptor;
 import static com.facebook.presto.metadata.InternalNode.NodeStatus.ALIVE;
 import static com.facebook.presto.metadata.InternalNode.NodeStatus.DEAD;
@@ -145,7 +150,8 @@ public final class DiscoveryNodeManager
             NodeVersion expectedNodeVersion,
             @ForNodeManager HttpClient httpClient,
             @ForNodeManager DriftClient<ThriftServerInfoClient> driftClient,
-            InternalCommunicationConfig internalCommunicationConfig)
+            InternalCommunicationConfig internalCommunicationConfig
+    )
     {
         this.serviceSelector = requireNonNull(serviceSelector, "serviceSelector is null");
         this.failureDetector = requireNonNull(failureDetector, "failureDetector is null");
@@ -318,6 +324,8 @@ public final class DiscoveryNodeManager
             URI uri = getHttpUri(service, httpsRequired);
             OptionalInt thriftPort = getThriftServerPort(service);
             NodeVersion nodeVersion = getNodeVersion(service);
+            // get gpu tags
+            Set<String> workerTags = getWorkerTags(uri);
             // Currently, a node may have the roles of both a coordinator and a worker.  In the future, a resource manager may also
             // take the form of a coordinator, hence these flags are not exclusive.
             boolean coordinator = isCoordinator(service);
@@ -326,7 +334,8 @@ public final class DiscoveryNodeManager
             boolean coordinatorSidecar = isCoordinatorSidecar(service);
             OptionalInt raftPort = getRaftPort(service);
             if (uri != null && nodeVersion != null) {
-                InternalNode node = new InternalNode(service.getNodeId(), uri, thriftPort, nodeVersion, coordinator, resourceManager, catalogServer, coordinatorSidecar, ALIVE, raftPort, getPoolType(service));
+                // add gpu tags for nodes
+                InternalNode node = new InternalNode(service.getNodeId(), uri, thriftPort, nodeVersion, coordinator, resourceManager, catalogServer, coordinatorSidecar, ALIVE, raftPort, getPoolType(service), workerTags);
                 NodeState nodeState = getNodeState(node);
                 switch (nodeState) {
                     case ACTIVE:
@@ -582,6 +591,30 @@ public final class DiscoveryNodeManager
         }
         return null;
     }
+
+    private Set<String> getWorkerTags(URI baseUri)
+    {
+        try {
+            URI statusUri = baseUri.resolve("/v1/status");
+
+            Request request = prepareGet()
+                    .setUri(statusUri)
+                    .build();
+
+            NodeStatus nodeStatus = httpClient.execute(request, createJsonResponseHandler(jsonCodec(NodeStatus.class)));
+
+            if (nodeStatus == null || nodeStatus.getGpuSupported() == null) {
+                return ImmutableSet.of();
+            }
+
+            return ImmutableSet.copyOf(nodeStatus.getGpuSupported());
+        }
+        catch (Exception e) {
+            log.debug(e, "Failed to fetch worker tags from %s", baseUri);
+            return ImmutableSet.of();
+        }
+    }
+
 
     private static OptionalInt getThriftServerPort(ServiceDescriptor descriptor)
     {

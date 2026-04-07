@@ -27,6 +27,7 @@ import jakarta.ws.rs.core.Response;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
+import java.util.Set;
 
 import static com.facebook.airlift.units.Duration.nanosSince;
 import static com.facebook.presto.server.security.RoleType.INTERNAL;
@@ -90,6 +91,7 @@ public class StatusResource
                 operatingSystemMXBean == null ? 0 : operatingSystemMXBean.getSystemCpuLoad(),
                 memoryMXBean.getHeapMemoryUsage().getUsed(),
                 memoryMXBean.getHeapMemoryUsage().getMax(),
-                memoryMXBean.getNonHeapMemoryUsage().getUsed());
+                memoryMXBean.getNonHeapMemoryUsage().getUsed(),
+                Set.of());
     }
 }
