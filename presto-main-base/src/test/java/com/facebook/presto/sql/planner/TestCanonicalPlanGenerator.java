@@ -21,7 +21,12 @@ import com.facebook.presto.common.plan.PlanCanonicalizationStrategy;
 import com.facebook.presto.common.type.TestingTypeDeserializer;
 import com.facebook.presto.common.type.TestingTypeManager;
 import com.facebook.presto.common.type.Type;
+import com.facebook.presto.spi.ConnectorId;
+import com.facebook.presto.spi.ConnectorSplit;
+import com.facebook.presto.spi.ConnectorTableHandle;
+import com.facebook.presto.spi.ConnectorTableLayoutHandle;
 import com.facebook.presto.spi.TableHandle;
+import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
 import com.facebook.presto.spi.plan.Partitioning;
 import com.facebook.presto.spi.plan.PartitioningHandle;
 import com.facebook.presto.spi.plan.PartitioningScheme;
@@ -43,6 +48,7 @@ import java.util.stream.Collectors;
 import static com.facebook.presto.common.plan.PlanCanonicalizationStrategy.CONNECTOR;
 import static com.facebook.presto.common.plan.PlanCanonicalizationStrategy.IGNORE_SAFE_CONSTANTS;
 import static com.facebook.presto.common.plan.PlanCanonicalizationStrategy.IGNORE_SCAN_CONSTANTS;
+import static com.facebook.presto.common.plan.PlanCanonicalizationStrategy.RESULT_CACHE;
 import static com.facebook.presto.sql.Optimizer.PlanStage.OPTIMIZED_AND_VALIDATED;
 import static com.facebook.presto.sql.planner.CanonicalPlanGenerator.generateCanonicalPlan;
 import static com.facebook.presto.sql.planner.CanonicalPlanGenerator.generateCanonicalPlanFragment;
@@ -250,6 +256,189 @@ public class TestCanonicalPlanGenerator
                 "SELECT totalprice, CAST(3 AS VARCHAR) from orders WHERE custkey > 100 AND custkey < 120",
                 "SELECT totalprice, CAST(2 AS VARCHAR) as x from orders WHERE custkey > 100 AND custkey < 120",
                 IGNORE_SCAN_CONSTANTS);
+    }
+
+    /**
+     * Under RESULT_CACHE the canonicalization must preserve constants in projections
+     * (and CAST'd projections), because result caching keys on exact query equivalence.
+     * Under IGNORE_SAFE_CONSTANTS / IGNORE_SCAN_CONSTANTS those same constants are
+     * stripped, so the comparison there should hold equal — included as a sanity
+     * cross-check that the strategy is actually behaving differently.
+     */
+    @Test
+    public void testResultCachePreservesProjectionConstants()
+            throws Exception
+    {
+        // Same SQL → same canonical plan under RESULT_CACHE.
+        assertSameCanonicalLeafPlan(
+                "SELECT 1 from orders",
+                "SELECT 1 from orders",
+                RESULT_CACHE);
+        assertSameCanonicalLeafPlan(
+                "SELECT totalprice, custkey + (totalprice / 10) from orders",
+                "SELECT totalprice, custkey + (totalprice / 10) from orders",
+                RESULT_CACHE);
+
+        // Different projection literals → different canonical plans under RESULT_CACHE.
+        assertDifferentCanonicalLeafPlan(
+                "SELECT 1 from orders",
+                "SELECT 2 from orders",
+                RESULT_CACHE);
+        assertDifferentCanonicalLeafPlan(
+                "SELECT CAST(1 AS VARCHAR) from orders",
+                "SELECT CAST(2 AS VARCHAR) from orders",
+                RESULT_CACHE);
+        assertDifferentCanonicalLeafPlan(
+                "SELECT totalprice, custkey + (totalprice / 10) from orders",
+                "SELECT totalprice, custkey + (totalprice / 5) from orders",
+                RESULT_CACHE);
+
+        // Cross-check: the same pairs are EQUAL under the constant-erasing strategies,
+        // confirming the difference above is RESULT_CACHE specific (not a bug in the
+        // SQL pair).
+        assertSameCanonicalLeafPlan(
+                "SELECT 1 from orders",
+                "SELECT 2 from orders",
+                IGNORE_SAFE_CONSTANTS);
+        assertSameCanonicalLeafPlan(
+                "SELECT CAST(1 AS VARCHAR) from orders",
+                "SELECT CAST(2 AS VARCHAR) from orders",
+                IGNORE_SCAN_CONSTANTS);
+    }
+
+    /**
+     * Under RESULT_CACHE filter constants must be preserved — two queries with
+     * different WHERE-clause literals read different rows and must canonicalize
+     * to different plans.
+     */
+    @Test
+    public void testResultCachePreservesFilterConstants()
+            throws Exception
+    {
+        // Same SQL → same canonical plan.
+        assertSameCanonicalLeafPlan(
+                "SELECT totalprice from orders WHERE custkey > 100 AND custkey < 120",
+                "SELECT totalprice from orders WHERE custkey > 100 AND custkey < 120",
+                RESULT_CACHE);
+
+        // Range bound differs → different canonical plans.
+        assertDifferentCanonicalLeafPlan(
+                "SELECT totalprice from orders WHERE custkey > 100 AND custkey < 110",
+                "SELECT totalprice from orders WHERE custkey > 100 AND custkey < 120",
+                RESULT_CACHE);
+
+        // IN-list element differs → different canonical plans.
+        assertDifferentCanonicalLeafPlan(
+                "SELECT totalprice from orders WHERE custkey IN (10,20,30)",
+                "SELECT totalprice from orders WHERE custkey IN (10,30,40)",
+                RESULT_CACHE);
+
+        // Different filter column → different canonical plans.
+        assertDifferentCanonicalLeafPlan(
+                "SELECT totalprice from orders WHERE orderkey < 100",
+                "SELECT totalprice from orders WHERE custkey < 100",
+                RESULT_CACHE);
+
+        // Reordered IN-list with the same elements → same canonical plan
+        // (canonicalization sorts them).
+        assertSameCanonicalLeafPlan(
+                "SELECT totalprice from orders WHERE custkey IN (10,20,30)",
+                "SELECT totalprice from orders WHERE custkey IN (10,30,20)",
+                RESULT_CACHE);
+    }
+
+    /**
+     * The {@link ConnectorTableLayoutHandle#getIdentifier} value must flow into
+     * the canonical plan under RESULT_CACHE, otherwise data-version-aware
+     * connectors (Iceberg snapshot id, etc.) cannot make the cache key change
+     * when the underlying data changes.
+     *
+     * This test goes through {@link CanonicalTableHandle#getCanonicalTableHandle}
+     * directly so it doesn't depend on TPC-H exposing layout identifiers.
+     */
+    @Test
+    public void testResultCacheLayoutIdentifierParticipates()
+    {
+        ConnectorId connectorId = new ConnectorId("test_connector");
+        ConnectorTableHandle connectorTableHandle = new TestingConnectorTableHandle();
+        ConnectorTransactionHandle transactionHandle = new ConnectorTransactionHandle() {};
+
+        TableHandle handleA = new TableHandle(
+                connectorId,
+                connectorTableHandle,
+                transactionHandle,
+                Optional.of(new IdentifierStubLayoutHandle("snapshot-a")));
+        TableHandle handleB = new TableHandle(
+                connectorId,
+                connectorTableHandle,
+                transactionHandle,
+                Optional.of(new IdentifierStubLayoutHandle("snapshot-b")));
+        TableHandle handleADuplicate = new TableHandle(
+                connectorId,
+                connectorTableHandle,
+                transactionHandle,
+                Optional.of(new IdentifierStubLayoutHandle("snapshot-a")));
+
+        CanonicalTableHandle canonicalA = CanonicalTableHandle.getCanonicalTableHandle(handleA, RESULT_CACHE);
+        CanonicalTableHandle canonicalB = CanonicalTableHandle.getCanonicalTableHandle(handleB, RESULT_CACHE);
+        CanonicalTableHandle canonicalADuplicate = CanonicalTableHandle.getCanonicalTableHandle(handleADuplicate, RESULT_CACHE);
+
+        // The identifier from the layout handle must be exposed on the canonical handle.
+        assertEquals(canonicalA.getLayoutIdentifier(), Optional.of("snapshot-a"));
+        assertEquals(canonicalB.getLayoutIdentifier(), Optional.of("snapshot-b"));
+
+        // Two layouts with different identifiers ⇒ different CanonicalTableHandle ⇒ they
+        // would hash differently inside the canonical plan.
+        assertNotEquals(canonicalA, canonicalB);
+
+        // Same identifier ⇒ same CanonicalTableHandle (cache hits work).
+        assertEquals(canonicalA, canonicalADuplicate);
+
+        // The strategy is plumbed through to ConnectorTableLayoutHandle.getIdentifier:
+        // a layout that returns a different value per strategy should be reflected here.
+        TableHandle strategyAware = new TableHandle(
+                connectorId,
+                connectorTableHandle,
+                transactionHandle,
+                Optional.of(new StrategyAwareStubLayoutHandle()));
+        assertEquals(
+                CanonicalTableHandle.getCanonicalTableHandle(strategyAware, RESULT_CACHE).getLayoutIdentifier(),
+                Optional.of("id-for-RESULT_CACHE"));
+        assertEquals(
+                CanonicalTableHandle.getCanonicalTableHandle(strategyAware, IGNORE_SAFE_CONSTANTS).getLayoutIdentifier(),
+                Optional.of("id-for-IGNORE_SAFE_CONSTANTS"));
+    }
+
+    private static class TestingConnectorTableHandle
+            implements ConnectorTableHandle
+    {
+    }
+
+    private static class IdentifierStubLayoutHandle
+            implements ConnectorTableLayoutHandle
+    {
+        private final Object identifier;
+
+        IdentifierStubLayoutHandle(Object identifier)
+        {
+            this.identifier = identifier;
+        }
+
+        @Override
+        public Object getIdentifier(Optional<ConnectorSplit> split, com.facebook.presto.common.plan.PlanCanonicalizationStrategy strategy)
+        {
+            return identifier;
+        }
+    }
+
+    private static class StrategyAwareStubLayoutHandle
+            implements ConnectorTableLayoutHandle
+    {
+        @Override
+        public Object getIdentifier(Optional<ConnectorSplit> split, com.facebook.presto.common.plan.PlanCanonicalizationStrategy strategy)
+        {
+            return "id-for-" + strategy.name();
+        }
     }
 
     private static List<SubPlan> getLeafSubPlans(SubPlan subPlan)

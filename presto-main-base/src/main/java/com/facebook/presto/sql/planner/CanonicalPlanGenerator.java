@@ -111,6 +111,7 @@ import static java.lang.String.format;
 import static java.util.Comparator.comparing;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toCollection;
+import static com.facebook.presto.common.plan.PlanCanonicalizationStrategy.RESULT_CACHE;
 
 public class CanonicalPlanGenerator
         extends InternalPlanVisitor<Optional<PlanNode>, CanonicalPlanGenerator.Context>
@@ -201,7 +202,7 @@ public class CanonicalPlanGenerator
     @Override
     public Optional<PlanNode> visitTableWriter(TableWriterNode node, Context context)
     {
-        if (strategy == DEFAULT) {
+        if (strategy == DEFAULT || strategy == RESULT_CACHE) {
             return Optional.empty();
         }
 
@@ -238,7 +239,7 @@ public class CanonicalPlanGenerator
     @Override
     public Optional<PlanNode> visitTableFinish(TableFinishNode node, Context context)
     {
-        if (strategy == DEFAULT) {
+        if (strategy == DEFAULT || strategy == RESULT_CACHE) {
             return Optional.empty();
         }
 
@@ -774,7 +775,7 @@ public class CanonicalPlanGenerator
         }
 
         List<RowExpressionReference> rowExpressionReferences = node.getOutputVariables().stream()
-                .map(variable -> new RowExpressionReference(inlineAndCanonicalize(context.getExpressions(), variable, strategy == IGNORE_SAFE_CONSTANTS), variable))
+                .map(variable -> new RowExpressionReference(inlineAndCanonicalize(context.getExpressions(), variable, shouldRemoveConstantsForOutput()), variable))
                 .sorted(comparing(rowExpressionReference -> writeValueAsString(rowExpressionReference.getRowExpression())))
                 .collect(toImmutableList());
 
@@ -1007,7 +1008,7 @@ public class CanonicalPlanGenerator
         }
 
         List<RowExpressionReference> rowExpressionReferences = node.getAssignments().entrySet().stream()
-                .map(entry -> new RowExpressionReference(inlineAndCanonicalize(context.getExpressions(), entry.getValue(), strategy == IGNORE_SAFE_CONSTANTS || strategy == IGNORE_SCAN_CONSTANTS), entry.getKey()))
+                .map(entry -> new RowExpressionReference(inlineAndCanonicalize(context.getExpressions(), entry.getValue(), shouldRemoveConstantsForProject()), entry.getKey()))
                 .sorted(comparing(rowExpressionReference -> writeValueAsString(rowExpressionReference.getRowExpression())))
                 .collect(toImmutableList());
         ImmutableMap.Builder<VariableReferenceExpression, RowExpression> assignments = ImmutableMap.builder();
@@ -1249,6 +1250,16 @@ public class CanonicalPlanGenerator
         return Optional.of(new EquiJoinClause(
                 (VariableReferenceExpression) callExpression.getArguments().get(0),
                 (VariableReferenceExpression) callExpression.getArguments().get(1)));
+    }
+
+    private boolean shouldRemoveConstantsForProject()
+    {
+        return strategy == IGNORE_SAFE_CONSTANTS || strategy == IGNORE_SCAN_CONSTANTS;
+    }
+
+    private boolean shouldRemoveConstantsForOutput()
+    {
+        return strategy == IGNORE_SAFE_CONSTANTS;
     }
 
     private static <T extends RowExpression> T inlineAndCanonicalize(

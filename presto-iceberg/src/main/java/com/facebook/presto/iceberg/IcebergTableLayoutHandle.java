@@ -14,16 +14,19 @@
 package com.facebook.presto.iceberg;
 
 import com.facebook.presto.common.Subfield;
+import com.facebook.presto.common.plan.PlanCanonicalizationStrategy;
 import com.facebook.presto.common.predicate.TupleDomain;
 import com.facebook.presto.hive.BaseHiveColumnHandle;
 import com.facebook.presto.hive.BaseHiveTableLayoutHandle;
 import com.facebook.presto.hive.PartitionSet;
 import com.facebook.presto.hive.metastore.Column;
 import com.facebook.presto.spi.ColumnHandle;
+import com.facebook.presto.spi.ConnectorSplit;
 import com.facebook.presto.spi.relation.RowExpression;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 
 import java.util.List;
 import java.util.Map;
@@ -31,6 +34,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.facebook.presto.common.plan.PlanCanonicalizationStrategy.RESULT_CACHE;
+import static com.facebook.presto.expressions.CanonicalRowExpressionRewriter.canonicalizeRowExpression;
 import static com.facebook.presto.hive.MetadataUtils.isEntireColumn;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
@@ -159,6 +164,30 @@ public class IcebergTableLayoutHandle
     public String toString()
     {
         return table.toString();
+    }
+
+    /**
+     * Identifier to decide whether two layouts read the same data. For Iceberg this MUST include the snapshot id:
+     * the same (schema, table, predicate) at a different snapshot reads different data and must hash differently
+     */
+    @Override
+    public Object getIdentifier(Optional<ConnectorSplit> split, PlanCanonicalizationStrategy canonicalizationStrategy)
+    {
+        IcebergTableName icebergTableName = table.getIcebergTableName();
+
+        return ImmutableMap.builder()
+                .put("schemaTableName", table.getSchemaTableName())
+                .put("tableType", icebergTableName.getTableType())
+                // snapshot id (and the changelog end snapshot, for CDC reads) is what
+                // makes the identifier flip when the table's data changes.
+                .put("snapshotId", icebergTableName.getSnapshotId())
+                .put("changelogEndSnapshot", icebergTableName.getChangelogEndSnapshot())
+                // Predicates that affect which rows are produced. canonicalize the
+                // row expression so semantically equivalent expressions hash equal.
+                .put("domainPredicate", getDomainPredicate())
+                .put("remainingPredicate", canonicalizeRowExpression(getRemainingPredicate(), false))
+                .put("partitionColumnPredicate", getPartitionColumnPredicate())
+                .build();
     }
 
     public static class Builder

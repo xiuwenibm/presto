@@ -69,7 +69,14 @@ public enum PlanCanonicalizationStrategy
      *
      * This is used in context of history based optimizations.
      */
-    IGNORE_SCAN_CONSTANTS(3);
+    IGNORE_SCAN_CONSTANTS(3),
+
+    /** New strategy for result cache.
+     * Result cache requires exact query-result equivalence,
+     * so details like predicate constants must be preserved.
+     */
+    RESULT_CACHE(4);
+
 
     /**
      * Creates a list of PlanCanonicalizationStrategy to be used for history based optimizations.
