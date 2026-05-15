@@ -32,14 +32,24 @@ public class CanonicalPlanFragment
 {
     private final CanonicalPlan plan;
     private final CanonicalPartitioningScheme partitioningScheme;
+    /**
+     * SHA-256 of the session-properties that can affect query results (see
+     * {@link SessionPropertiesFingerprint}). Lives on the fragment so it ends up in the
+     * JSON the fragment-result cache key is hashed over: two queries with identical plans
+     * but different result-affecting session overrides must produce different cache keys.
+     * Defaults to the empty-input sha256 string when no overrides exist.
+     */
+    private final String sessionPropertiesFingerprint;
 
     @JsonCreator
     public CanonicalPlanFragment(
             @JsonProperty("plan") CanonicalPlan plan,
-            @JsonProperty("partitionScheme") CanonicalPartitioningScheme partitioningScheme)
+            @JsonProperty("partitionScheme") CanonicalPartitioningScheme partitioningScheme,
+            @JsonProperty("sessionPropertiesFingerprint") String sessionPropertiesFingerprint)
     {
         this.plan = requireNonNull(plan, "plan is null");
         this.partitioningScheme = requireNonNull(partitioningScheme, "partitioningScheme is null");
+        this.sessionPropertiesFingerprint = requireNonNull(sessionPropertiesFingerprint, "sessionPropertiesFingerprint is null");
     }
 
     @JsonProperty
@@ -54,6 +64,12 @@ public class CanonicalPlanFragment
         return partitioningScheme;
     }
 
+    @JsonProperty
+    public String getSessionPropertiesFingerprint()
+    {
+        return sessionPropertiesFingerprint;
+    }
+
     @Override
     public boolean equals(Object o)
     {
@@ -65,13 +81,14 @@ public class CanonicalPlanFragment
         }
         CanonicalPlanFragment that = (CanonicalPlanFragment) o;
         return Objects.equals(plan, that.plan) &&
-                Objects.equals(partitioningScheme, that.partitioningScheme);
+                Objects.equals(partitioningScheme, that.partitioningScheme) &&
+                Objects.equals(sessionPropertiesFingerprint, that.sessionPropertiesFingerprint);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(plan, partitioningScheme);
+        return Objects.hash(plan, partitioningScheme, sessionPropertiesFingerprint);
     }
 
     @Override
@@ -80,12 +97,16 @@ public class CanonicalPlanFragment
         return toStringHelper(this)
                 .add("plan", plan)
                 .add("partitioningScheme", partitioningScheme)
+                .add("sessionPropertiesFingerprint", sessionPropertiesFingerprint)
                 .toString();
     }
 
     public CanonicalPlanFragment updateRuntimeInformation(ConnectorSplit split)
     {
-        return new CanonicalPlanFragment(new CanonicalPlan(rewriteWith(new RuntimeInformationRewriter(split), plan.getPlan()), plan.getStrategy()), partitioningScheme);
+        return new CanonicalPlanFragment(
+                new CanonicalPlan(rewriteWith(new RuntimeInformationRewriter(split), plan.getPlan()), plan.getStrategy()),
+                partitioningScheme,
+                sessionPropertiesFingerprint);
     }
 
     private static class RuntimeInformationRewriter

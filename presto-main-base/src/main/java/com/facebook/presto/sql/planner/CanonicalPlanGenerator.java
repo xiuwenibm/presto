@@ -160,7 +160,12 @@ public class CanonicalPlanGenerator
         if (!context.getExpressions().keySet().containsAll(partitioningScheme.getOutputLayout())) {
             return Optional.empty();
         }
-        return canonicalPlan.map(planNode -> new CanonicalPlanFragment(new CanonicalPlan(planNode, DEFAULT), getCanonicalPartitioningScheme(partitioningScheme, context.getExpressions())));
+        // Compute the session-properties fingerprint once per canonical fragment. Threading
+        // this through here (rather than from FragmentResultCacheContext) keeps the canonical
+        // plan itself self-describing — anyone serializing the fragment for any reason sees
+        // the same hash bytes the fragment-result cache will use as part of the key.
+        String fingerprint = SessionPropertiesFingerprint.compute(session, session.getSessionPropertyManager());
+        return canonicalPlan.map(planNode -> new CanonicalPlanFragment(new CanonicalPlan(planNode, DEFAULT), getCanonicalPartitioningScheme(partitioningScheme, context.getExpressions()), fingerprint));
     }
 
     // Returns `CanonicalPlan`. If we encounter a `PlanNode` with unimplemented canonicalization, we return `Optional.empty()`

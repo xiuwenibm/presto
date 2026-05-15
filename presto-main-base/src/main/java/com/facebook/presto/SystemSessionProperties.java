@@ -868,12 +868,12 @@ public final class SystemSessionProperties
                         LEGACY_ROW_FIELD_ORDINAL_ACCESS,
                         "Allow accessing anonymous row field with .field0, .field1, ...",
                         functionsConfig.isLegacyRowFieldOrdinalAccess(),
-                        false),
+                        false).withResultAffecting(true),
                 booleanProperty(
                         LEGACY_MAP_SUBSCRIPT,
                         "Do not fail the query if map key is missing",
                         functionsConfig.isLegacyMapSubscript(),
-                        true),
+                        true).withResultAffecting(true),
                 booleanProperty(
                         ITERATIVE_OPTIMIZER,
                         "Experimental: enable iterative optimizer",
@@ -920,7 +920,7 @@ public final class SystemSessionProperties
                         LEGACY_TIMESTAMP,
                         "Use legacy TIME & TIMESTAMP semantics (warning: this will be removed)",
                         functionsConfig.isLegacyTimestamp(),
-                        true),
+                        true).withResultAffecting(true),
                 booleanProperty(
                         ENABLE_INTERMEDIATE_AGGREGATIONS,
                         "Enable the use of intermediate aggregations",
@@ -965,7 +965,7 @@ public final class SystemSessionProperties
                         PARSE_DECIMAL_LITERALS_AS_DOUBLE,
                         "Parse decimal literals as DOUBLE instead of DECIMAL",
                         functionsConfig.isParseDecimalLiteralsAsDouble(),
-                        false),
+                        false).withResultAffecting(true),
                 booleanProperty(
                         FORCE_SINGLE_NODE_OUTPUT,
                         "Force single node output",
@@ -1051,12 +1051,12 @@ public final class SystemSessionProperties
                         MAX_GROUPING_SETS,
                         "Maximum number of grouping sets in a GROUP BY",
                         featuresConfig.getMaxGroupingSets(),
-                        true),
+                        true).withResultAffecting(true),
                 booleanProperty(
                         LEGACY_UNNEST,
                         "Using legacy unnest semantic, where unnest(array(row)) will create one column of type row",
                         featuresConfig.isLegacyUnnestArrayRows(),
-                        false),
+                        false).withResultAffecting(true),
                 booleanProperty(
                         STATISTICS_CPU_TIMER_ENABLED,
                         "Experimental: Enable cpu time tracking for automatic column statistics collection on write",
@@ -1231,7 +1231,7 @@ public final class SystemSessionProperties
                         EXPERIMENTAL_FUNCTIONS_ENABLED,
                         "Enable listing of functions marked as experimental",
                         featuresConfig.isExperimentalFunctionsEnabled(),
-                        false),
+                        false).withResultAffecting(true),
                 booleanProperty(
                         OPTIMIZE_COMMON_SUB_EXPRESSIONS,
                         "Extract and compute common sub-expressions in projection",
@@ -1393,12 +1393,12 @@ public final class SystemSessionProperties
                         PARTIAL_RESULTS_ENABLED,
                         "Enable returning partial results. Please note that queries might not read all the data when this is enabled",
                         featuresConfig.isPartialResultsEnabled(),
-                        false),
+                        false).withResultAffecting(true),
                 doubleProperty(
                         PARTIAL_RESULTS_COMPLETION_RATIO_THRESHOLD,
                         "Minimum query completion ratio threshold for partial results",
                         featuresConfig.getPartialResultsCompletionRatioThreshold(),
-                        false),
+                        false).withResultAffecting(true),
                 booleanProperty(
                         ENHANCED_CTE_SCHEDULING_ENABLED,
                         "Applicable for CTE Materialization. If enabled, only tablescans of the pending tablewriters are blocked and other stages can continue.",
@@ -1408,12 +1408,12 @@ public final class SystemSessionProperties
                         OFFSET_CLAUSE_ENABLED,
                         "Enable support for OFFSET clause",
                         featuresConfig.isOffsetClauseEnabled(),
-                        true),
+                        true).withResultAffecting(true),
                 doubleProperty(
                         PARTIAL_RESULTS_MAX_EXECUTION_TIME_MULTIPLIER,
                         "This value is multiplied by the time taken to reach the completion ratio threshold and is set as max task end time",
                         featuresConfig.getPartialResultsMaxExecutionTimeMultiplier(),
-                        false),
+                        false).withResultAffecting(true),
                 booleanProperty(
                         VERBOSE_EXCEEDED_MEMORY_LIMIT_ERRORS_ENABLED,
                         "When enabled the error message for exceeded memory limit errors will contain additional operator memory allocation details",
@@ -1451,7 +1451,7 @@ public final class SystemSessionProperties
                             }
                             return (Boolean) value;
                         },
-                        object -> object),
+                        object -> object).withResultAffecting(true),
                 booleanProperty(
                         MATERIALIZED_VIEW_ALLOW_FULL_REFRESH_ENABLED,
                         "Allow full refresh of MV when it's empty - potentially high cost.",
@@ -1592,17 +1592,17 @@ public final class SystemSessionProperties
                         KEY_BASED_SAMPLING_ENABLED,
                         "Key based sampling of tables enabled",
                         false,
-                        false),
+                        false).withResultAffecting(true),
                 doubleProperty(
                         KEY_BASED_SAMPLING_PERCENTAGE,
                         "Percentage of keys to be sampled",
                         0.01,
-                        false),
+                        false).withResultAffecting(true),
                 stringProperty(
                         KEY_BASED_SAMPLING_FUNCTION,
                         "Sampling function for key based sampling",
                         "key_sampling_percent",
-                        false),
+                        false).withResultAffecting(true),
                 integerProperty(
                         MAX_STAGE_COUNT_FOR_EAGER_SCHEDULING,
                         "Maximum stage count to use eager scheduling when using the adaptive scheduling policy",
@@ -1714,12 +1714,12 @@ public final class SystemSessionProperties
                         compilerConfig.getLeafNodeLimit(),
                         false,
                         value -> validateIntegerValue(value, MAX_LEAF_NODES_IN_PLAN, 0, false),
-                        object -> object),
+                        object -> object).withResultAffecting(true),
                 booleanProperty(
                         LEAF_NODE_LIMIT_ENABLED,
                         "Throw exception if the number of leaf nodes in logical plan exceeds threshold set in max_leaf_nodes_in_plan",
                         compilerConfig.getLeafNodeLimitEnabled(),
-                        false),
+                        false).withResultAffecting(true),
                 booleanProperty(
                         PUSH_REMOTE_EXCHANGE_THROUGH_GROUP_ID,
                         "Enable optimization rule to push remote exchange through GroupId",
@@ -1847,17 +1847,17 @@ public final class SystemSessionProperties
                         FIELD_NAMES_IN_JSON_CAST_ENABLED,
                         "Include field names in json output when casting rows",
                         functionsConfig.isFieldNamesInJsonCastEnabled(),
-                        false),
+                        false).withResultAffecting(true),
                 booleanProperty(
                         LEGACY_JSON_CAST,
                         "Keep the legacy json cast behavior, do not reserve the case for field names when casting to row type",
                         functionsConfig.isLegacyJsonCast(),
-                        true),
+                        true).withResultAffecting(true),
                 booleanProperty(
                         CANONICALIZED_JSON_EXTRACT,
                         "Extracts json data in a canonicalized manner, and raises a PrestoException when encountering invalid json structures within the input json path",
                         functionsConfig.isCanonicalizedJsonExtract(),
-                        true),
+                        true).withResultAffecting(true),
                 booleanProperty(
                         OPTIMIZE_JOIN_PROBE_FOR_EMPTY_BUILD_RUNTIME,
                         "Optimize join probe at runtime if build side is empty",
@@ -2184,7 +2184,7 @@ public final class SystemSessionProperties
                         TRY_FUNCTION_CATCHABLE_ERRORS,
                         "Comma-separated list of error code names that TRY function should catch (such as 'GENERIC_INTERNAL_ERROR,INVALID_ARGUMENTS')",
                         featuresConfig.getTryFunctionCatchableErrors(),
-                        false));
+                        false).withResultAffecting(true));
     }
 
     public static int getMaxPrefixesCount(Session session)

@@ -159,7 +159,7 @@ public final class IcebergSessionProperties
                         MERGE_ON_READ_MODE_ENABLED,
                         "Reads enabled for merge-on-read Iceberg tables",
                         icebergConfig.isMergeOnReadModeEnabled(),
-                        false))
+                        false).withResultAffecting(true))
                 .add(new PropertyMetadata<>(
                         HIVE_METASTORE_STATISTICS_MERGE_STRATEGY,
                         "Flags to choose which statistics from the Hive Metastore are used when calculating table stats. Valid values are: "

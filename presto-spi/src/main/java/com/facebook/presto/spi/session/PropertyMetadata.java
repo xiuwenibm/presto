@@ -38,6 +38,7 @@ public final class PropertyMetadata<T>
     private final T defaultValue;
     private final Function<Object, T> decoder;
     private final Function<T, Object> encoder;
+    private final boolean resultAffecting;
     private final List<AdditionalSqlTypeHandler> additionalSqlTypeHandlers = new ArrayList<>();
 
     public PropertyMetadata(
@@ -47,6 +48,28 @@ public final class PropertyMetadata<T>
             Class<T> javaType,
             T defaultValue,
             boolean hidden,
+            Function<Object, T> decoder,
+            Function<T, Object> encoder)
+    {
+        this(name, description, sqlType, javaType, defaultValue, hidden, false, decoder, encoder);
+    }
+
+    /**
+     * Full constructor allowing the caller to mark the property as result-affecting.
+     * A result-affecting property is one whose value can change the rows produced by a query
+     * (e.g. legacy timestamp semantics, decimal-literal parsing). Such properties are included
+     * in the fragment-result-cache key fingerprint so that overriding them invalidates cached
+     * results. Properties that are purely operational (resource limits, priorities, etc.) must
+     * leave this flag {@code false} so cache hits are preserved across innocuous overrides.
+     */
+    public PropertyMetadata(
+            String name,
+            String description,
+            Type sqlType,
+            Class<T> javaType,
+            T defaultValue,
+            boolean hidden,
+            boolean resultAffecting,
             Function<Object, T> decoder,
             Function<T, Object> encoder)
     {
@@ -61,6 +84,7 @@ public final class PropertyMetadata<T>
         this.defaultValue = defaultValue;
         this.decoder = requireNonNull(decoder, "decoder is null");
         this.encoder = requireNonNull(encoder, "encoder is null");
+        this.resultAffecting = resultAffecting;
     }
 
     /**
@@ -115,6 +139,40 @@ public final class PropertyMetadata<T>
     {
         return sessionPropertyMetadata.isHidden();
     }
+
+    /**
+     * Does this property's value affect the rows a query produces? Properties that return
+     * {@code true} participate in the session-properties fingerprint that feeds the
+     * fragment-result-cache key, so overrides invalidate cached results.
+     */
+    public boolean isResultAffecting()
+    {
+        return resultAffecting;
+    }
+
+    /**
+     * Returns an equivalent {@code PropertyMetadata} with the {@code resultAffecting} flag set
+     * to the given value. Convenience for callers that build properties via the existing
+     * factory methods ({@link #booleanProperty}, {@link #stringProperty}, etc.) and want to
+     * opt into the result-cache fingerprint at registration time.
+     */
+    public PropertyMetadata<T> withResultAffecting(boolean resultAffecting)
+    {
+        if (this.resultAffecting == resultAffecting) {
+            return this;
+        }
+        return new PropertyMetadata<>(
+                getName(),
+                getDescription(),
+                sqlType,
+                javaType,
+                defaultValue,
+                isHidden(),
+                resultAffecting,
+                decoder,
+                encoder);
+    }
+
 
     /**
      * Decodes the SQL type object value to the Java type of the property.
@@ -278,7 +336,7 @@ public final class PropertyMetadata<T>
         boolean isDefaultValueEqual = (this.defaultValue == null && that.defaultValue == null)
                 || (this.defaultValue != null && this.defaultValue.equals(that.defaultValue));
 
-        return isSessionPropertyMetadataEqual && isJavaTypeEqual && isDefaultValueEqual;
+        return isSessionPropertyMetadataEqual && isJavaTypeEqual && isDefaultValueEqual && this.resultAffecting == that.resultAffecting;
     }
 
     @Override
@@ -288,6 +346,7 @@ public final class PropertyMetadata<T>
 
         result = 31 * result + Objects.hashCode(javaType);
         result = 31 * result + Objects.hashCode(defaultValue);
+        result = 31 * result + Boolean.hashCode(resultAffecting);
 
         return result;
     }

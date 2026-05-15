@@ -299,6 +299,16 @@ public final class Session
         return systemProperties;
     }
 
+    /**
+     * Exposed so callers (e.g. fragment-result-cache fingerprinting) can resolve property
+     * metadata without having the manager threaded through their call sites separately.
+     */
+    public SessionPropertyManager getSessionPropertyManager()
+    {
+        return sessionPropertyManager;
+    }
+
+
     public Map<String, String> getPreparedStatements()
     {
         return preparedStatements;

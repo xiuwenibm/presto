@@ -243,6 +243,41 @@ public final class SessionPropertyManager
         connectorSessionProperties.remove(connectorId);
     }
 
+    /**
+     * Returns every result-affecting property currently registered with the manager —
+     * both system and connector — keyed by its qualified name. System properties keep
+     * their bare name; connector properties are keyed {@code <connectorId>.<propertyName>}
+     * so the keys are globally unique. The map is sorted and immutable so the iteration
+     * order is deterministic, which matters because this set is fed into the session-
+     * properties fingerprint used in fragment-result-cache keys.
+     *
+     * <p>A property is included iff its {@link PropertyMetadata#isResultAffecting()} flag is
+     * {@code true}. New properties default to {@code false} so additions to Presto's session-
+     * property surface are opt-in to the fingerprint rather than silently included.
+     */
+    public Map<String, PropertyMetadata<?>> getResultAffectingProperties()
+    {
+        ImmutableMap.Builder<String, PropertyMetadata<?>> builder = ImmutableMap.builder();
+        new TreeMap<>(systemSessionProperties).forEach((name, property) -> {
+            if (property.isResultAffecting()) {
+                builder.put(name, property);
+            }
+        });
+        new TreeMap<>(memoizedWorkerSessionProperties.get()).forEach((name, property) -> {
+            if (property.isResultAffecting()) {
+                builder.put(name, property);
+            }
+        });
+        new TreeMap<>(connectorSessionProperties).forEach((connectorId, propertiesByName) -> {
+            new TreeMap<>(propertiesByName).forEach((name, property) -> {
+                if (property.isResultAffecting()) {
+                    builder.put(connectorId + "." + name, property);
+                }
+            });
+        });
+        return builder.buildOrThrow();
+    }
+
     public Optional<PropertyMetadata<?>> getSystemSessionPropertyMetadata(String name)
     {
         requireNonNull(name, "name is null");

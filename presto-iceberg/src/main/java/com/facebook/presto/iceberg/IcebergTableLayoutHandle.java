@@ -167,7 +167,7 @@ public class IcebergTableLayoutHandle
     }
 
     /**
-     * Identifier to decide whether two layouts read the same data. For Iceberg this MUST include the snapshot id:
+     * Identifier used by fragment-result caching to decide whether two layouts read the same data. For Iceberg this MUST include the snapshot id:
      * the same (schema, table, predicate) at a different snapshot reads different data and must hash differently
      */
     @Override

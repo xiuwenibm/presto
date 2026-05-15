@@ -422,7 +422,7 @@ public final class HiveSessionProperties
                         OFFLINE_DATA_DEBUG_MODE_ENABLED,
                         "allow reading from tables or partitions that are marked as offline or not readable",
                         false,
-                        true),
+                        true).withResultAffecting(true),
                 booleanProperty(
                         SHUFFLE_PARTITIONED_COLUMNS_FOR_TABLE_WRITE,
                         "Shuffle the data on partitioned columns",
@@ -456,7 +456,7 @@ public final class HiveSessionProperties
                         IGNORE_UNREADABLE_PARTITION,
                         "Ignore unreadable partitions and report as warnings instead of failing the query",
                         hiveClientConfig.isIgnoreUnreadablePartition(),
-                        false),
+                        false).withResultAffecting(true),
                 new PropertyMetadata<>(
                         BUCKET_FUNCTION_TYPE_FOR_EXCHANGE,
                         "hash function type for bucketed table exchange",
@@ -664,7 +664,7 @@ public final class HiveSessionProperties
                         LEGACY_TIMESTAMP_BUCKETING,
                         "Use legacy timestamp bucketing algorithm (which is not Hive compatible) for table bucketed by timestamp type.",
                         hiveClientConfig.isLegacyTimestampBucketing(),
-                        false),
+                        false).withResultAffecting(true),
                 booleanProperty(
                         OPTIMIZE_PARSING_OF_PARTITION_VALUES,
                         "Optimize partition values parsing when number of candidates are large",
